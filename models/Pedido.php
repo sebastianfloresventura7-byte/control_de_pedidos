@@ -37,4 +37,10 @@ class Pedido {
             ':id' => $id
         ]);
     }
+    public function eliminar($id) {
+    $db = (new Conexion())->conectar();
+    $sql = "DELETE FROM pedidos WHERE id_pedido = :id";
+    $stmt = $db->prepare($sql);
+    return $stmt->execute([':id' => $id]);
+    }
 }

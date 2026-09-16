@@ -43,15 +43,22 @@
                                     <td><span class="badge bg-warning text-dark"><?= $p['estado'] ?></span></td>
                                     <td><?= $p['fecha'] ?></td>
                                     <td>
-                                        <form action="index.php?accion=cambiar_estado" method="POST">
-                                            <input type="hidden" name="id" value="<?= $p['id_pedido'] ?>">
-                                            <select name="estado" class="form-select form-select-sm" onchange="this.form.submit()">
-                                                <option value="Pendiente" <?= $p['estado'] == 'Pendiente' ? 'selected' : '' ?>>Pendiente</option>
-                                                <option value="En Preparación" <?= $p['estado'] == 'En Preparación' ? 'selected' : '' ?>>En Preparación</option>
-                                                <option value="Entregado" <?= $p['estado'] == 'Entregado' ? 'selected' : '' ?>>Entregado</option>
-                                                <option value="Cancelado" <?= $p['estado'] == 'Cancelado' ? 'selected' : '' ?>>Cancelado</option>
-                                            </select>
-                                        </form>
+                                        <div class="d-flex gap-2">
+                                            <form action="index.php?accion=cambiar_estado" method="POST" class="flex-grow-1">
+                                                <input type="hidden" name="id" value="<?= $p['id_pedido'] ?>">
+                                                <select name="estado" class="form-select form-select-sm" onchange="this.form.submit()">
+                                                    <option value="Pendiente" <?= $p['estado'] == 'Pendiente' ? 'selected' : '' ?>>Pendiente</option>
+                                                    <option value="En Preparación" <?= $p['estado'] == 'En Preparación' ? 'selected' : '' ?>>En Preparación</option>
+                                                    <option value="Entregado" <?= $p['estado'] == 'Entregado' ? 'selected' : '' ?>>Entregado</option>
+                                                    <option value="Cancelado" <?= $p['estado'] == 'Cancelado' ? 'selected' : '' ?>>Cancelado</option>
+                                                </select>
+                                            </form>
+
+                                            <form action="index.php?accion=eliminar" method="POST" onsubmit="return confirm('¿Seguro que deseas eliminar este pedido?');">
+                                                <input type="hidden" name="id" value="<?= $p['id_pedido'] ?>">
+                                                <button type="submit" class="btn btn-danger btn-sm">Eliminar</button>
+                                            </form>
+                                        </div>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>

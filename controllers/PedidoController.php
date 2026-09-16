@@ -66,5 +66,19 @@ class PedidoController {
             exit();
         }
     }
+
+    public function eliminarPedido() {
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $id = $_POST['id'] ?? null;
+            
+            if ($id) {
+                $pedidoModel = new Pedido();
+                $pedidoModel->eliminar($id);
+            }
+            
+            header("Location: index.php");
+            exit();
+        }
+    }
 }
 ?>

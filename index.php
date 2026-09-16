@@ -18,6 +18,9 @@ switch ($accion) {
     case 'cambiar_estado':
         $controller->cambiarEstado();
         break;
+    case 'eliminar':
+        $controller->eliminarPedido();
+        break;
     default:
         $controller->mostrarDashboard();
         break;
