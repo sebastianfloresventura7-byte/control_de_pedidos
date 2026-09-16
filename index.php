@@ -15,6 +15,9 @@ switch ($accion) {
     case 'guardar':
         $controller->guardarPedido();
         break;
+    case 'cambiar_estado':
+        $controller->cambiarEstado();
+        break;
     default:
         $controller->mostrarDashboard();
         break;

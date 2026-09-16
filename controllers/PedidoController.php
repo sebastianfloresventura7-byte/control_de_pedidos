@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . "/../config/conexion.php";
+require_once __DIR__ . "/../models/Pedido.php";
 
 class PedidoController {
     private $db;
@@ -17,7 +18,7 @@ class PedidoController {
         $stmt->execute();
         $pedidos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        require_once "views/dashboard.php";
+        require_once __DIR__ . "/../views/dashboard.php";
     }
 
     public function mostrarFormularioNuevo() {
@@ -25,7 +26,7 @@ class PedidoController {
         $stmt->execute();
         $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        require_once "views/nuevo_pedido.php";
+        require_once __DIR__ . "/../views/nuevo_pedido.php";
     }
 
     public function guardarPedido() {
@@ -47,6 +48,22 @@ class PedidoController {
             $stmtPedido->execute([$idCliente, $total]);
 
             header("Location: index.php");
+            exit();
+        }
+    }
+
+    public function cambiarEstado() {
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $id = $_POST['id'] ?? null;
+            $estado = $_POST['estado'] ?? null;
+            
+            if ($id && $estado) {
+                $pedidoModel = new Pedido();
+                $pedidoModel->actualizarEstado($id, $estado);
+            }
+            
+            header("Location: index.php");
+            exit();
         }
     }
 }
