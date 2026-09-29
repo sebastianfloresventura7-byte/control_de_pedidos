@@ -15,7 +15,10 @@
                     <small class="text-muted">Sistema de Control de Pedidos</small>
                 </div>
             </div>
-            <a href="index.php?accion=nuevo" class="btn btn-primary">+ Nuevo Pedido</a>
+            <div class="d-flex gap-2">
+                <a href="index.php?accion=reportes" class="btn btn-outline-success font-weight-bold"> Reporte de Ventas</a>
+                <a href="index.php?accion=nuevo" class="btn btn-primary">+ Nuevo Pedido</a>
+            </div>
         </div>
         
         <div class="card shadow-sm">

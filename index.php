@@ -1,28 +1,32 @@
 <?php
-require_once __DIR__ . "/config/conexion.php";
-require_once __DIR__ . "/controllers/PedidoController.php";
+// index.php
 
-$controller = new PedidoController();
-$accion = isset($_GET['accion']) ? $_GET['accion'] : 'inicio';
+require_once "config/conexion.php";
+
+$conexionObj = new Conexion();
+$conexion = $conexionObj->conectar();
+
+$accion = isset($_GET['accion']) ? $_GET['accion'] : 'dashboard';
 
 switch ($accion) {
-    case 'inicio':
-        $controller->mostrarDashboard();
+    case 'dashboard':
+        require_once "views/dashboard.php";
         break;
-    case 'nuevo':
-        $controller->mostrarFormularioNuevo();
+        
+    case 'reportes':
+        require_once "views/reportes.php";
         break;
-    case 'guardar':
-        $controller->guardarPedido();
-        break;
-    case 'cambiar_estado':
-        $controller->cambiarEstado();
-        break;
-    case 'eliminar':
-        $controller->eliminarPedido();
-        break;
+
+    case 'exportar_excel':
+        require_once "exportar_excel.php";
+        exit; // Cambiado break por exit
+
+    case 'exportar_pdf':
+        require_once "exportar_pdf.php";
+        exit; // Cambiado break por exit
+
     default:
-        $controller->mostrarDashboard();
+        require_once "views/dashboard.php";
         break;
 }
 ?>
