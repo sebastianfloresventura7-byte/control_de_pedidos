@@ -1,291 +1,272 @@
 <?php
-// views/reportes.php
+// Configuración de conexión a la base de datos
+$host = "localhost";
+$usuario = "root";
+$password = "";
+$base_datos = "control_de_pedidos";
 
-// ----------------------------------------------------
-// 1. PROCESAR REGISTRO DE NUEVO PEDIDO (SI SE ENVIÓ EL FORMULARIO)
-// ----------------------------------------------------
-$mensaje_exito = "";
-$mensaje_error = "";
+$conn = mysqli_connect($host, $usuario, $password, $base_datos);
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registrar_pedido'])) {
-    $cliente_nombre = trim($_POST['cliente_nombre'] ?? '');
-    $cliente_telefono = trim($_POST['cliente_telefono'] ?? '');
-    $producto = $_POST['producto'] ?? '';
-    $cantidad = intval($_POST['cantidad'] ?? 1);
-    $precio_unitario = floatval($_POST['precio_unitario'] ?? 0);
+if (!$conn) {
+    die("Error de conexión: " . mysqli_connect_error());
+}
 
-    if (!empty($cliente_nombre) && !empty($producto) && $precio_unitario > 0) {
-        try {
-            // Verificar o registrar cliente
-            $stmt_c = $conexion->prepare("SELECT id_cliente FROM clientes WHERE nombre = :nombre LIMIT 1");
-            $stmt_c->execute([':nombre' => $cliente_nombre]);
-            $cliente = $stmt_c->fetch(PDO::FETCH_ASSOC);
+mysqli_set_charset($conn, "utf8mb4");
 
-            if ($cliente) {
-                $id_cliente = $cliente['id_cliente'];
-            } else {
-                $stmt_inst_c = $conexion->prepare("INSERT INTO clientes (nombre, telefono) VALUES (:nombre, :telefono)");
-                $stmt_inst_c->execute([':nombre' => $cliente_nombre, ':telefono' => $cliente_telefono]);
-                $id_cliente = $conexion->lastInsertId();
-            }
+// 1. PROCESAR ACCIONES (Eliminar / Cambiar Estado / Registrar)
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['registrar_pedido'])) {
+        $cliente_nom = mysqli_real_escape_string($conn, trim($_POST['cliente']));
+        $telefono = mysqli_real_escape_string($conn, trim($_POST['telefono']));
+        $total = floatval($_POST['total']);
+        $estado = 'Pendiente';
 
-            // Registrar pedido
-            $total = $precio_unitario * $cantidad;
-            $stmt_p = $conexion->prepare("INSERT INTO pedidos (id_cliente, total, estado, fecha) VALUES (:id_cliente, :total, 'Pendiente', NOW())");
-            $stmt_p->execute([':id_cliente' => $id_cliente, ':total' => $total]);
-
-            $mensaje_exito = "¡Pedido registrado correctamente!";
-        } catch (Exception $e) {
-            $mensaje_error = "Error al registrar el pedido: " . $e->getMessage();
+        $res_cli = mysqli_query($conn, "SELECT id_cliente FROM clientes WHERE nombre = '$cliente_nom' LIMIT 1");
+        if ($res_cli && mysqli_num_rows($res_cli) > 0) {
+            $cli_data = mysqli_fetch_assoc($res_cli);
+            $id_cliente = $cli_data['id_cliente'];
+        } else {
+            mysqli_query($conn, "INSERT INTO clientes (nombre, telefono) VALUES ('$cliente_nom', '$telefono')");
+            $id_cliente = mysqli_insert_id($conn);
         }
-    } else {
-        $mensaje_error = "Por favor completa todos los campos obligatorios del pedido.";
+
+        $sql_ins = "INSERT INTO pedidos (id_cliente, fecha, total, estado) VALUES ('$id_cliente', NOW(), '$total', '$estado')";
+        if (mysqli_query($conn, $sql_ins)) {
+            header("Location: index.php?accion=sistema&msj=registrado");
+            exit;
+        }
     }
 }
 
-// ----------------------------------------------------
-// 2. CONSULTA Y FILTROS PARA EL REPORTE DE VENTAS
-// ----------------------------------------------------
-$busqueda = isset($_GET['busqueda']) ? trim($_GET['busqueda']) : '';
-$fecha_inicio = isset($_GET['fecha_inicio']) ? $_GET['fecha_inicio'] : '';
-$fecha_fin = isset($_GET['fecha_fin']) ? $_GET['fecha_fin'] : '';
+if (isset($_GET['cambiar_estado']) && isset($_GET['id'])) {
+    $id_ped = intval($_GET['id']);
+    $nuevo_est = mysqli_real_escape_string($conn, $_GET['cambiar_estado']);
+    mysqli_query($conn, "UPDATE pedidos SET estado = '$nuevo_est' WHERE id_pedido = $id_ped");
+    header("Location: index.php?accion=sistema");
+    exit;
+}
 
-$sql = "SELECT p.id_pedido, c.nombre AS cliente, c.telefono, p.total AS precio, p.fecha, p.estado 
-        FROM pedidos p 
-        INNER JOIN clientes c ON p.id_cliente = c.id_cliente 
+if (isset($_GET['eliminar']) && isset($_GET['id'])) {
+    $id_ped = intval($_GET['id']);
+    mysqli_query($conn, "DELETE FROM pedidos WHERE id_pedido = $id_ped");
+    header("Location: index.php?accion=sistema");
+    exit;
+}
+
+// 2. FILTROS Y BÚSQUEDA
+$busqueda = isset($_GET['busqueda']) ? trim($_GET['busqueda']) : '';
+$fecha_desde = isset($_GET['fecha_desde']) ? $_GET['fecha_desde'] : '';
+$fecha_hasta = isset($_GET['fecha_hasta']) ? $_GET['fecha_hasta'] : '';
+
+$sql = "SELECT 
+            p.id_pedido,
+            c.nombre AS cliente,
+            c.telefono,
+            p.total,
+            p.fecha,
+            p.estado
+        FROM pedidos p
+        LEFT JOIN clientes c ON p.id_cliente = c.id_cliente
         WHERE 1=1";
 
-$params = [];
-
 if (!empty($busqueda)) {
-    $sql .= " AND (c.nombre LIKE :busqueda OR p.id_pedido LIKE :busqueda)";
-    $params[':busqueda'] = "%$busqueda%";
+    $busqueda_esc = mysqli_real_escape_string($conn, $busqueda);
+    $sql .= " AND (c.nombre LIKE '%$busqueda_esc%' OR p.id_pedido = '$busqueda_esc')";
 }
 
-if (!empty($fecha_inicio)) {
-    $sql .= " AND DATE(p.fecha) >= :fecha_inicio";
-    $params[':fecha_inicio'] = $fecha_inicio;
+if (!empty($fecha_desde)) {
+    $fecha_desde_esc = mysqli_real_escape_string($conn, $fecha_desde);
+    $sql .= " AND DATE(p.fecha) >= '$fecha_desde_esc'";
 }
 
-if (!empty($fecha_fin)) {
-    $sql .= " AND DATE(p.fecha) <= :fecha_fin";
-    $params[':fecha_fin'] = $fecha_fin;
+if (!empty($fecha_hasta)) {
+    $fecha_hasta_esc = mysqli_real_escape_string($conn, $fecha_hasta);
+    $sql .= " AND DATE(p.fecha) <= '$fecha_hasta_esc'";
 }
 
-$sql .= " ORDER BY p.fecha DESC";
+$sql .= " ORDER BY p.id_pedido DESC";
+$result = mysqli_query($conn, $sql);
 
-$stmt = $conexion->prepare($sql);
-$stmt->execute($params);
-$ventas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+// 3. MÉTRICAS
+$sql_metricas = "SELECT COUNT(*) as total_pedidos, SUM(total) as total_ingresos FROM pedidos";
+$res_metricas = mysqli_query($conn, $sql_metricas);
+$metricas = mysqli_fetch_assoc($res_metricas);
 
-// Cálculo de métricas
-$total_ingresos = 0;
-$total_pedidos = count($ventas);
-
-foreach ($ventas as $v) {
-    if ($v['estado'] !== 'Anulado') {
-        $total_ingresos += $v['precio'];
-    }
-}
-
-$ticket_promedio = $total_pedidos > 0 ? ($total_ingresos / $total_pedidos) : 0;
+$total_ingresos = $metricas['total_ingresos'] ?? 0;
+$total_pedidos = $metricas['total_pedidos'] ?? 0;
+$ticket_promedio = ($total_pedidos > 0) ? ($total_ingresos / $total_pedidos) : 0;
 ?>
 
-<!-- Estilos Bootstrap -->
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pollería El Buen Sabor - Control de Pedidos</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background-color: #f8f9fa; }
+        .header-title { background-color: #ffc107; font-weight: bold; }
+        .card-stat { border-radius: 12px; border: none; }
+    </style>
+</head>
+<body>
 
-<div class="container-fluid py-4 bg-light min-vh-100">
+<div class="container my-4">
+    <!-- Encabezado -->
+    <div class="header-title p-3 rounded d-flex justify-content-between align-items-center mb-4">
+        <h4 class="m-0"><i class="fa-solid fa-store me-2"></i> POLLERÍA "EL BUEN SABOR" - REGISTRO DE PEDIDOS Y CONTROL DE VENTAS</h4>
+        <a href="index.php" class="btn btn-outline-dark btn-sm"><i class="fa-solid fa-house me-1"></i> Inicio</a>
+    </div>
 
-    <!-- Mensajes de Estado -->
-    <?php if (!empty($mensaje_exito)): ?>
-        <div class="alert alert-success alert-dismissible fade show fw-bold" role="alert">
-            <i class="bi bi-check-circle-fill me-2"></i><?= $mensaje_exito ?>
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    <!-- Formulario de Registro de Nuevo Pedido -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white fw-bold">
+            <i class="fa-solid fa-cart-plus me-2 text-warning"></i> Registrar Nuevo Pedido
         </div>
-    <?php endif; ?>
-
-    <?php if (!empty($mensaje_error)): ?>
-        <div class="alert alert-danger alert-dismissible fade show fw-bold" role="alert">
-            <i class="bi bi-exclamation-triangle-fill me-2"></i><?= $mensaje_error ?>
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-    <?php endif; ?>
-
-    <!-- SECCIÓN 1: FORMULARIO DE REGISTRO DE PEDIDOS -->
-    <div class="card border-0 shadow-sm rounded-3 bg-white mb-4">
-        <div class="card-header bg-warning text-dark fw-bold py-3">
-            <i class="bi bi-shop me-2"></i> POLLERÍA "EL BUEN SABOR" - REGISTRO DE PEDIDOS
-        </div>
-        <div class="card-body p-4">
-            <form method="POST" action="index.php?accion=reportes" class="row g-3">
+        <div class="card-body">
+            <form method="POST" action="index.php?accion=sistema" class="row g-3">
                 <input type="hidden" name="registrar_pedido" value="1">
-
                 <div class="col-md-4">
-                    <label class="form-label fw-semibold">Nombre del Cliente *</label>
-                    <input type="text" name="cliente_nombre" class="form-control" placeholder="Ej. Juan Pérez" required>
+                    <label class="form-label fw-bold">Nombre del Cliente *</label>
+                    <input type="text" name="cliente" class="form-control" placeholder="Ej. Juan Pérez" required>
                 </div>
-
-                <div class="col-md-2">
-                    <label class="form-label fw-semibold">Teléfono</label>
-                    <input type="text" name="cliente_telefono" class="form-control" placeholder="Ej. 987654321">
-                </div>
-
                 <div class="col-md-3">
-                    <label class="form-label fw-semibold">Producto / Plato *</label>
-                    <select name="producto" id="producto_select" class="form-select" onchange="actualizarPrecio()" required>
-                        <option value="" data-precio="0">-- Seleccionar Opción --</option>
-                        <optgroup label="🍗 Pollo a la Brasa">
-                            <option value="1/8 de Pollo" data-precio="12.00">1/8 de Pollo + Papas</option>
-                            <option value="1/4 de Pollo" data-precio="18.50">1/4 de Pollo + Papas + Ensalada</option>
-                            <option value="1/2 Pollo" data-precio="35.00">1/2 Pollo + Papas + Ensalada</option>
-                            <option value="1 Pollo Entero" data-precio="65.00">1 Pollo Entero + Papas + Ensalada</option>
-                            <option value="Mostrito" data-precio="22.00">Mostrito (1/4 Pollo + Chaufa + Papas)</option>
-                        </optgroup>
-                        <optgroup label="🥤 Bebidas">
-                            <option value="Inka Kola 1.5L" data-precio="9.50">Inka Kola 1.5L</option>
-                            <option value="Coca Cola 1.5L" data-precio="9.50">Coca Cola 1.5L</option>
-                            <option value="Inka Kola Personal" data-precio="4.50">Inka Kola Personal</option>
-                            <option value="Coca Cola Personal" data-precio="4.50">Coca Cola Personal</option>
-                            <option value="Chicha Morada 1L" data-precio="8.00">Chicha Morada 1L</option>
-                        </optgroup>
-                    </select>
+                    <label class="form-label fw-bold">Teléfono</label>
+                    <input type="text" name="telefono" class="form-control" placeholder="Ej. 900234398">
                 </div>
-
-                <div class="col-md-1">
-                    <label class="form-label fw-semibold">Cant.</label>
-                    <input type="number" name="cantidad" id="cantidad" class="form-control" value="1" min="1" onchange="calcularTotal()" required>
+                <div class="col-md-3">
+                    <label class="form-label fw-bold">Monto Total (S/) *</label>
+                    <input type="number" step="0.50" name="total" class="form-control" placeholder="0.00" required>
                 </div>
-
-                <div class="col-md-2">
-                    <label class="form-label fw-semibold">Precio Unit. (S/)</label>
-                    <input type="number" step="0.10" name="precio_unitario" id="precio_unitario" class="form-control" placeholder="0.00" onchange="calcularTotal()" required>
-                </div>
-
-                <div class="col-12 d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
-                    <div>
-                        <span class="fs-5 fw-bold text-secondary">Total a Pagar: </span>
-                        <span class="fs-4 fw-bold text-success" id="total_pagar">S/ 0.00</span>
-                    </div>
-                    <button type="submit" class="btn btn-warning btn-lg fw-bold px-4">
-                        <i class="bi bi-check-circle-fill me-1"></i> Guardar y Registrar Pedido
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-warning fw-bold w-100">
+                        <i class="fa-solid fa-plus me-1"></i> Guardar
                     </button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- SECCIÓN 2: TARJETAS DE MÉTRICAS -->
-    <div class="row g-3 mb-4">
-        <div class="col-md-4">
-            <div class="card border-0 shadow-sm rounded-3 bg-white p-3">
-                <div class="d-flex align-items-center">
-                    <div class="rounded-circle bg-success bg-opacity-10 p-3 me-3 text-success fs-3">
-                        <i class="bi bi-currency-dollar"></i>
-                    </div>
-                    <div>
-                        <span class="text-muted small fw-semibold">Total Ingresos</span>
-                        <h4 class="fw-bold mb-0 text-dark">S/ <?= number_format($total_ingresos, 2) ?></h4>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card border-0 shadow-sm rounded-3 bg-white p-3">
-                <div class="d-flex align-items-center">
-                    <div class="rounded-circle bg-primary bg-opacity-10 p-3 me-3 text-primary fs-3">
-                        <i class="bi bi-receipt"></i>
-                    </div>
-                    <div>
-                        <span class="text-muted small fw-semibold">Total Pedidos</span>
-                        <h4 class="fw-bold mb-0 text-dark"><?= $total_pedidos ?></h4>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card border-0 shadow-sm rounded-3 bg-white p-3">
-                <div class="d-flex align-items-center">
-                    <div class="rounded-circle bg-info bg-opacity-10 p-3 me-3 text-info fs-3">
-                        <i class="bi bi-calculator"></i>
-                    </div>
-                    <div>
-                        <span class="text-muted small fw-semibold">Ticket Promedio</span>
-                        <h4 class="fw-bold mb-0 text-dark">S/ <?= number_format($ticket_promedio, 2) ?></h4>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- SECCIÓN 3: FILTROS DE BÚSQUEDA Y REPORTE -->
-    <div class="card border-0 shadow-sm rounded-3 bg-white mb-4">
-        <div class="card-body p-3">
+    <!-- Filtros de Búsqueda y Botones de Exportación -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body">
             <form method="GET" action="index.php" class="row g-3 align-items-end">
-                <input type="hidden" name="accion" value="reportes">
-                
-                <div class="col-md-4">
-                    <label class="form-label small fw-semibold">Búsqueda (Cliente / ID):</label>
-                    <input type="text" name="busqueda" class="form-control" placeholder="Nombre de cliente o N° pedido" value="<?= htmlspecialchars($busqueda) ?>">
-                </div>
+                <input type="hidden" name="accion" value="sistema">
                 <div class="col-md-3">
-                    <label class="form-label small fw-semibold">Fecha Desde:</label>
-                    <input type="date" name="fecha_inicio" class="form-control" value="<?= htmlspecialchars($fecha_inicio) ?>">
+                    <label class="form-label fw-bold">Búsqueda (Cliente / ID):</label>
+                    <input type="text" name="busqueda" class="form-control" placeholder="Nombre de cliente o N° pedido" value="<?php echo htmlspecialchars($busqueda); ?>">
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label small fw-semibold">Fecha Hasta:</label>
-                    <input type="date" name="fecha_fin" class="form-control" value="<?= htmlspecialchars($fecha_fin) ?>">
+                <div class="col-md-2">
+                    <label class="form-label fw-bold">Fecha Desde:</label>
+                    <input type="date" name="fecha_desde" class="form-control" value="<?php echo htmlspecialchars($fecha_desde); ?>">
                 </div>
-                <div class="col-md-2 d-flex gap-2">
-                    <button type="submit" class="btn btn-primary fw-bold w-100"><i class="bi bi-filter"></i> Filtrar</button>
-                    <a href="index.php?accion=reportes" class="btn btn-outline-secondary fw-bold w-100">Limpiar</a>
+                <div class="col-md-2">
+                    <label class="form-label fw-bold">Fecha Hasta:</label>
+                    <input type="date" name="fecha_hasta" class="form-control" value="<?php echo htmlspecialchars($fecha_hasta); ?>">
+                </div>
+                <div class="col-md-2 gap-1 d-flex">
+                    <button type="submit" class="btn btn-primary w-100"><i class="fa-solid fa-filter"></i> Filtrar</button>
+                    <a href="index.php?accion=sistema" class="btn btn-outline-secondary"><i class="fa-solid fa-rotate-left"></i></a>
+                </div>
+                <div class="col-md-3 d-flex gap-2 justify-content-end">
+                    <a href="views/exportar_excel.php" class="btn btn-success fw-bold"><i class="fa-solid fa-file-excel me-1"></i> Excel</a>
+                    <a href="views/exportar_pdf.php" target="_blank" class="btn btn-danger fw-bold"><i class="fa-solid fa-file-pdf me-1"></i> PDF</a>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- BOTONES DE EXPORTACIÓN -->
-    <div class="mb-3 d-flex gap-2">
-        <a href="exportar_excel.php?busqueda=<?= urlencode($busqueda) ?>&fecha_inicio=<?= urlencode($fecha_inicio) ?>&fecha_fin=<?= urlencode($fecha_fin) ?>" class="btn btn-success fw-bold">
-            <i class="bi bi-file-earmark-excel me-1"></i> Exportar a Excel
-        </a>
-        <a href="exportar_pdf.php?busqueda=<?= urlencode($busqueda) ?>&fecha_inicio=<?= urlencode($fecha_inicio) ?>&fecha_fin=<?= urlencode($fecha_fin) ?>" target="_blank" class="btn btn-danger fw-bold">
-            <i class="bi bi-file-earmark-pdf me-1"></i> Exportar a PDF / Imprimir
-        </a>
+    <!-- Métricas KPI -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card card-stat bg-white shadow-sm p-3 d-flex flex-row align-items-center">
+                <div class="rounded-circle bg-success bg-opacity-10 p-3 me-3 text-success fs-3">
+                    <i class="fa-solid fa-dollar-sign"></i>
+                </div>
+                <div>
+                    <small class="text-muted fw-bold">Total Ingresos</small>
+                    <h3 class="m-0 fw-bold">S/ <?php echo number_format($total_ingresos, 2); ?></h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card card-stat bg-white shadow-sm p-3 d-flex flex-row align-items-center">
+                <div class="rounded-circle bg-primary bg-opacity-10 p-3 me-3 text-primary fs-3">
+                    <i class="fa-solid fa-receipt"></i>
+                </div>
+                <div>
+                    <small class="text-muted fw-bold">Total Pedidos</small>
+                    <h3 class="m-0 fw-bold"><?php echo $total_pedidos; ?></h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card card-stat bg-white shadow-sm p-3 d-flex flex-row align-items-center">
+                <div class="rounded-circle bg-info bg-opacity-10 p-3 me-3 text-info fs-3">
+                    <i class="fa-solid fa-calculator"></i>
+                </div>
+                <div>
+                    <small class="text-muted fw-bold">Ticket Promedio</small>
+                    <h3 class="m-0 fw-bold">S/ <?php echo number_format($ticket_promedio, 2); ?></h3>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <!-- SECCIÓN 4: TABLA DE HISTORIAL DE PEDIDOS -->
-    <div class="card border-0 shadow-sm rounded-3 bg-white">
+    <!-- Tabla de Pedidos -->
+    <div class="card shadow-sm border-0">
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="table-dark">
+                <table class="table table-hover align-middle text-center mb-0">
+                    <thead class="table-light">
                         <tr>
-                            <th class="ps-3"># Pedido</th>
+                            <th># Pedido</th>
                             <th>Cliente</th>
                             <th>Teléfono</th>
-                            <th>Total</th>
+                            <th>Total (S/)</th>
+                            <th>Fecha</th>
                             <th>Estado</th>
-                            <th>Fecha y Hora</th>
+                            <th>Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <?php if (!empty($ventas)): ?>
-                            <?php foreach ($ventas as $v): ?>
+                        <?php if ($result && mysqli_num_rows($result) > 0): ?>
+                            <?php while ($row = mysqli_fetch_assoc($result)): ?>
                                 <tr>
-                                    <td class="ps-3 fw-bold">#<?= $v['id_pedido'] ?></td>
-                                    <td><?= htmlspecialchars($v['cliente']) ?></td>
-                                    <td><?= htmlspecialchars($v['telefono'] ?? '-') ?></td>
-                                    <td class="fw-semibold">S/ <?= number_format($v['precio'], 2) ?></td>
+                                    <td class="fw-bold">#<?php echo htmlspecialchars($row['id_pedido']); ?></td>
+                                    <td><?php echo htmlspecialchars($row['cliente'] ?? 'Sin Registro'); ?></td>
+                                    <td><?php echo htmlspecialchars($row['telefono'] ?? '-'); ?></td>
+                                    <td class="fw-bold text-success">S/ <?php echo number_format($row['total'] ?? 0, 2); ?></td>
+                                    <td><?php echo !empty($row['fecha']) ? date('d/m/Y H:i', strtotime($row['fecha'])) : '-'; ?></td>
                                     <td>
-                                        <span class="badge bg-warning text-dark"><?= htmlspecialchars($v['estado']) ?></span>
+                                        <span class="badge bg-<?php echo ($row['estado'] == 'Pendiente') ? 'warning text-dark' : (($row['estado'] == 'En preparación') ? 'info text-dark' : 'success'); ?>">
+                                            <?php echo htmlspecialchars($row['estado'] ?? 'Pendiente'); ?>
+                                        </span>
                                     </td>
-                                    <td class="text-muted small"><?= date('d/m/Y H:i', strtotime($v['fecha'])) ?></td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm me-1">
+                                            <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                                                Estado
+                                            </button>
+                                            <ul class="dropdown-menu">
+                                                <li><a class="dropdown-item" href="index.php?accion=sistema&cambiar_estado=Pendiente&id=<?php echo $row['id_pedido']; ?>">Pendiente</a></li>
+                                                <li><a class="dropdown-item" href="index.php?accion=sistema&cambiar_estado=En preparación&id=<?php echo $row['id_pedido']; ?>">En preparación</a></li>
+                                                <li><a class="dropdown-item" href="index.php?accion=sistema&cambiar_estado=Completado&id=<?php echo $row['id_pedido']; ?>">Completado</a></li>
+                                            </ul>
+                                        </div>
+                                        <a href="index.php?accion=sistema&eliminar=1&id=<?php echo $row['id_pedido']; ?>" 
+                                           class="btn btn-sm btn-outline-danger" 
+                                           onclick="return confirm('¿Seguro de eliminar el pedido #<?php echo $row['id_pedido']; ?>?');">
+                                            <i class="fa-solid fa-trash"></i>
+                                        </a>
+                                    </td>
                                 </tr>
-                            <?php endforeach; ?>
+                            <?php endwhile; ?>
                         <?php else: ?>
                             <tr>
-                                <td colspan="6" class="text-center py-4 text-muted">No se encontraron datos registrados.</td>
+                                <td colspan="7" class="text-muted py-4">No se encontraron pedidos registrados.</td>
                             </tr>
                         <?php endif; ?>
                     </tbody>
@@ -295,21 +276,6 @@ $ticket_promedio = $total_pedidos > 0 ? ($total_ingresos / $total_pedidos) : 0;
     </div>
 </div>
 
-<!-- JavaScript para autocompletar precios y totales -->
-<script>
-function actualizarPrecio() {
-    const select = document.getElementById('producto_select');
-    const precio = select.options[select.selectedIndex].getAttribute('data-precio');
-    if (precio) {
-        document.getElementById('precio_unitario').value = precio;
-    }
-    calcularTotal();
-}
-
-function calcularTotal() {
-    const cantidad = parseFloat(document.getElementById('cantidad').value) || 0;
-    const precio = parseFloat(document.getElementById('precio_unitario').value) || 0;
-    const total = cantidad * precio;
-    document.getElementById('total_pagar').innerText = 'S/ ' + total.toFixed(2);
-}
-</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
