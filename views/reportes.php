@@ -18,6 +18,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['registrar_pedido'])) {
         $cliente_nom = mysqli_real_escape_string($conn, trim($_POST['cliente']));
         $telefono = mysqli_real_escape_string($conn, trim($_POST['telefono']));
+        
+        // Si seleccionó 'Otro', toma el texto personalizado
+        $pedido_sel = trim($_POST['pedido_select']);
+        if ($pedido_sel === 'Otro' && !empty($_POST['pedido_otro'])) {
+            $pedido_desc = mysqli_real_escape_string($conn, trim($_POST['pedido_otro']));
+        } else {
+            $pedido_desc = mysqli_real_escape_string($conn, $pedido_sel);
+        }
+
         $total = floatval($_POST['total']);
         $estado = 'Pendiente';
 
@@ -30,11 +39,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $id_cliente = mysqli_insert_id($conn);
         }
 
-        $sql_ins = "INSERT INTO pedidos (id_cliente, fecha, total, estado) VALUES ('$id_cliente', NOW(), '$total', '$estado')";
-        if (mysqli_query($conn, $sql_ins)) {
-            header("Location: index.php?accion=sistema&msj=registrado");
-            exit;
+        // Guardar pedido
+        $sql_ins = "INSERT INTO pedidos (id_cliente, pedido, total, estado, fecha) VALUES ('$id_cliente', '$pedido_desc', '$total', '$estado', NOW())";
+        if (!mysqli_query($conn, $sql_ins)) {
+            $sql_ins = "INSERT INTO pedidos (id_cliente, descripcion, total, estado, fecha) VALUES ('$id_cliente', '$pedido_desc', '$total', '$estado', NOW())";
+            mysqli_query($conn, $sql_ins);
         }
+
+        header("Location: index.php?accion=sistema&msj=registrado");
+        exit;
     }
 }
 
@@ -59,12 +72,9 @@ $fecha_desde = isset($_GET['fecha_desde']) ? $_GET['fecha_desde'] : '';
 $fecha_hasta = isset($_GET['fecha_hasta']) ? $_GET['fecha_hasta'] : '';
 
 $sql = "SELECT 
-            p.id_pedido,
+            p.*,
             c.nombre AS cliente,
-            c.telefono,
-            p.total,
-            p.fecha,
-            p.estado
+            c.telefono
         FROM pedidos p
         LEFT JOIN clientes c ON p.id_cliente = c.id_cliente
         WHERE 1=1";
@@ -128,18 +138,40 @@ $ticket_promedio = ($total_pedidos > 0) ? ($total_ingresos / $total_pedidos) : 0
         <div class="card-body">
             <form method="POST" action="index.php?accion=sistema" class="row g-3">
                 <input type="hidden" name="registrar_pedido" value="1">
-                <div class="col-md-4">
+                
+                <div class="col-md-3">
                     <label class="form-label fw-bold">Nombre del Cliente *</label>
                     <input type="text" name="cliente" class="form-control" placeholder="Ej. Juan Pérez" required>
                 </div>
-                <div class="col-md-3">
+                
+                <div class="col-md-2">
                     <label class="form-label fw-bold">Teléfono</label>
                     <input type="text" name="telefono" class="form-control" placeholder="Ej. 900234398">
                 </div>
+                
                 <div class="col-md-3">
+                    <label class="form-label fw-bold">Pedido / Producto *</label>
+                    <select name="pedido_select" id="pedido_select" class="form-select" onchange="toggleOtroPedido(this)" required>
+                        <option value="" disabled selected>-- Seleccione plato --</option>
+                        <option value="1 Pollo a la Brasa + Papas + Ensalada">1 Pollo + Papas + Ensalada</option>
+                        <option value="1/2 Pollo a la Brasa + Papas + Ensalada">1/2 Pollo + Papas + Ensalada</option>
+                        <option value="1/4 Pollo a la Brasa + Papas + Ensalada">1/4 Pollo + Papas + Ensalada</option>
+                        <option value="1/8 Pollo a la Brasa + Papas">1/8 Pollo + Papas</option>
+                        <option value="Mostrito (1/4 Pollo + Chaufa + Papas)">Mostrito (1/4 Pollo + Chaufa)</option>
+                        <option value="Inka Kola 1.5L">Inka Kola 1.5L</option>
+                        <option value="Coca Cola 1.5L">Coca Cola 1.5L</option>
+                        <option value="Jarra de Chicha Morada">Jarra de Chicha Morada</option>
+                        <option value="Otro">Otro / Combo Personalizado...</option>
+                    </select>
+                    <!-- Campo oculto para escribir si elige 'Otro' -->
+                    <input type="text" name="pedido_otro" id="pedido_otro" class="form-control mt-2 d-none" placeholder="Escriba el detalle del pedido...">
+                </div>
+                
+                <div class="col-md-2">
                     <label class="form-label fw-bold">Monto Total (S/) *</label>
                     <input type="number" step="0.50" name="total" class="form-control" placeholder="0.00" required>
                 </div>
+                
                 <div class="col-md-2 d-flex align-items-end">
                     <button type="submit" class="btn btn-warning fw-bold w-100">
                         <i class="fa-solid fa-plus me-1"></i> Guardar
@@ -171,7 +203,7 @@ $ticket_promedio = ($total_pedidos > 0) ? ($total_ingresos / $total_pedidos) : 0
                     <a href="index.php?accion=sistema" class="btn btn-outline-secondary"><i class="fa-solid fa-rotate-left"></i></a>
                 </div>
                 <div class="col-md-3 d-flex gap-2 justify-content-end">
-                    <a href="views/exportar_excel.php" class="btn btn-success fw-bold"><i class="fa-solid fa-file-excel me-1"></i> Excel</a>
+                    <a href="views/exportar_excel.php" class="btn btn-success fw-bold notranslate" translate="no"><i class="fa-solid fa-file-excel me-1"></i> Excel</a>
                     <a href="views/exportar_pdf.php" target="_blank" class="btn btn-danger fw-bold"><i class="fa-solid fa-file-pdf me-1"></i> PDF</a>
                 </div>
             </form>
@@ -225,6 +257,7 @@ $ticket_promedio = ($total_pedidos > 0) ? ($total_ingresos / $total_pedidos) : 0
                             <th># Pedido</th>
                             <th>Cliente</th>
                             <th>Teléfono</th>
+                            <th>Pedido / Detalle</th>
                             <th>Total (S/)</th>
                             <th>Fecha</th>
                             <th>Estado</th>
@@ -238,6 +271,7 @@ $ticket_promedio = ($total_pedidos > 0) ? ($total_ingresos / $total_pedidos) : 0
                                     <td class="fw-bold">#<?php echo htmlspecialchars($row['id_pedido']); ?></td>
                                     <td><?php echo htmlspecialchars($row['cliente'] ?? 'Sin Registro'); ?></td>
                                     <td><?php echo htmlspecialchars($row['telefono'] ?? '-'); ?></td>
+                                    <td><?php echo htmlspecialchars($row['pedido'] ?? $row['descripcion'] ?? $row['detalle'] ?? '-'); ?></td>
                                     <td class="fw-bold text-success">S/ <?php echo number_format($row['total'] ?? 0, 2); ?></td>
                                     <td><?php echo !empty($row['fecha']) ? date('d/m/Y H:i', strtotime($row['fecha'])) : '-'; ?></td>
                                     <td>
@@ -266,7 +300,7 @@ $ticket_promedio = ($total_pedidos > 0) ? ($total_ingresos / $total_pedidos) : 0
                             <?php endwhile; ?>
                         <?php else: ?>
                             <tr>
-                                <td colspan="7" class="text-muted py-4">No se encontraron pedidos registrados.</td>
+                                <td colspan="8" class="text-muted py-4">No se encontraron pedidos registrados.</td>
                             </tr>
                         <?php endif; ?>
                     </tbody>
@@ -277,5 +311,17 @@ $ticket_promedio = ($total_pedidos > 0) ? ($total_ingresos / $total_pedidos) : 0
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+function toggleOtroPedido(select) {
+    var inputOtro = document.getElementById('pedido_otro');
+    if (select.value === 'Otro') {
+        inputOtro.classList.remove('d-none');
+        inputOtro.required = true;
+    } else {
+        inputOtro.classList.add('d-none');
+        inputOtro.required = false;
+    }
+}
+</script>
 </body>
 </html>
