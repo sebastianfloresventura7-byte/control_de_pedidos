@@ -5,6 +5,8 @@ $usuario = "root";
 $password = "";
 $base_datos = "control_de_pedidos";
 
+mysqli_report(MYSQLI_REPORT_OFF);
+
 $conn = mysqli_connect($host, $usuario, $password, $base_datos);
 
 if (!$conn) {
@@ -19,17 +21,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $cliente_nom = mysqli_real_escape_string($conn, trim($_POST['cliente']));
         $telefono = mysqli_real_escape_string($conn, trim($_POST['telefono']));
         
-        // Si seleccionó 'Otro', toma el texto personalizado
-        $pedido_sel = trim($_POST['pedido_select']);
-        if ($pedido_sel === 'Otro' && !empty($_POST['pedido_otro'])) {
+        $pedido_input = trim($_POST['pedido_select'] ?? $_POST['pedido'] ?? '');
+        if ($pedido_input === 'Otro' && !empty($_POST['pedido_otro'])) {
             $pedido_desc = mysqli_real_escape_string($conn, trim($_POST['pedido_otro']));
         } else {
-            $pedido_desc = mysqli_real_escape_string($conn, $pedido_sel);
+            $pedido_desc = mysqli_real_escape_string($conn, $pedido_input);
         }
 
         $total = floatval($_POST['total']);
         $estado = 'Pendiente';
 
+        // Buscar o crear cliente
         $res_cli = mysqli_query($conn, "SELECT id_cliente FROM clientes WHERE nombre = '$cliente_nom' LIMIT 1");
         if ($res_cli && mysqli_num_rows($res_cli) > 0) {
             $cli_data = mysqli_fetch_assoc($res_cli);
@@ -39,10 +41,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $id_cliente = mysqli_insert_id($conn);
         }
 
-        // Guardar pedido
-        $sql_ins = "INSERT INTO pedidos (id_cliente, pedido, total, estado, fecha) VALUES ('$id_cliente', '$pedido_desc', '$total', '$estado', NOW())";
-        if (!mysqli_query($conn, $sql_ins)) {
+        // Intenta insertar en la columna activa
+        $sql_ins = "INSERT INTO pedidos (id_cliente, detalle, total, estado, fecha) VALUES ('$id_cliente', '$pedido_desc', '$total', '$estado', NOW())";
+        $ok = mysqli_query($conn, $sql_ins);
+
+        if (!$ok) {
             $sql_ins = "INSERT INTO pedidos (id_cliente, descripcion, total, estado, fecha) VALUES ('$id_cliente', '$pedido_desc', '$total', '$estado', NOW())";
+            $ok = mysqli_query($conn, $sql_ins);
+        }
+
+        if (!$ok) {
+            $sql_ins = "INSERT INTO pedidos (id_cliente, pedido, total, estado, fecha) VALUES ('$id_cliente', '$pedido_desc', '$total', '$estado', NOW())";
             mysqli_query($conn, $sql_ins);
         }
 
@@ -163,7 +172,6 @@ $ticket_promedio = ($total_pedidos > 0) ? ($total_ingresos / $total_pedidos) : 0
                         <option value="Jarra de Chicha Morada">Jarra de Chicha Morada</option>
                         <option value="Otro">Otro / Combo Personalizado...</option>
                     </select>
-                    <!-- Campo oculto para escribir si elige 'Otro' -->
                     <input type="text" name="pedido_otro" id="pedido_otro" class="form-control mt-2 d-none" placeholder="Escriba el detalle del pedido...">
                 </div>
                 
@@ -267,11 +275,24 @@ $ticket_promedio = ($total_pedidos > 0) ? ($total_ingresos / $total_pedidos) : 0
                     <tbody>
                         <?php if ($result && mysqli_num_rows($result) > 0): ?>
                             <?php while ($row = mysqli_fetch_assoc($result)): ?>
+                                <?php 
+                                    // Escanea todas las claves de la fila buscando el contenido real de la columna
+                                    $texto_pedido = '';
+                                    foreach ($row as $clave => $valor) {
+                                        if (in_array(strtolower($clave), ['detalle', 'descripcion', 'pedido', 'producto', 'plato', 'items']) && !empty(trim($valor))) {
+                                            $texto_pedido = $valor;
+                                            break;
+                                        }
+                                    }
+                                    if (empty(trim($texto_pedido))) {
+                                        $texto_pedido = '-';
+                                    }
+                                ?>
                                 <tr>
                                     <td class="fw-bold">#<?php echo htmlspecialchars($row['id_pedido']); ?></td>
                                     <td><?php echo htmlspecialchars($row['cliente'] ?? 'Sin Registro'); ?></td>
                                     <td><?php echo htmlspecialchars($row['telefono'] ?? '-'); ?></td>
-                                    <td><?php echo htmlspecialchars($row['pedido'] ?? $row['descripcion'] ?? $row['detalle'] ?? '-'); ?></td>
+                                    <td><?php echo htmlspecialchars($texto_pedido); ?></td>
                                     <td class="fw-bold text-success">S/ <?php echo number_format($row['total'] ?? 0, 2); ?></td>
                                     <td><?php echo !empty($row['fecha']) ? date('d/m/Y H:i', strtotime($row['fecha'])) : '-'; ?></td>
                                     <td>
