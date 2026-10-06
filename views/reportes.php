@@ -1,4 +1,14 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Si no está logueado, redirige a la raíz con accion=login
+if (!isset($_SESSION['usuario_logueado']) || $_SESSION['usuario_logueado'] !== true) {
+    header("Location: index.php?accion=login");
+    exit;
+}
+
 // Configuración de conexión a la base de datos
 $host = "localhost";
 $usuario = "root";
@@ -114,8 +124,10 @@ $metricas = mysqli_fetch_assoc($res_metricas);
 $total_ingresos = $metricas['total_ingresos'] ?? 0;
 $total_pedidos = $metricas['total_pedidos'] ?? 0;
 $ticket_promedio = ($total_pedidos > 0) ? ($total_ingresos / $total_pedidos) : 0;
-?>
 
+// Construir parámetros URL para que los botones de exportación mantengan el filtro
+$params_filtro = "busqueda=" . urlencode($busqueda) . "&fecha_desde=" . urlencode($fecha_desde) . "&fecha_hasta=" . urlencode($fecha_hasta);
+?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -136,7 +148,10 @@ $ticket_promedio = ($total_pedidos > 0) ? ($total_ingresos / $total_pedidos) : 0
     <!-- Encabezado -->
     <div class="header-title p-3 rounded d-flex justify-content-between align-items-center mb-4">
         <h4 class="m-0"><i class="fa-solid fa-store me-2"></i> POLLERÍA "EL BUEN SABOR" - REGISTRO DE PEDIDOS Y CONTROL DE VENTAS</h4>
-        <a href="index.php" class="btn btn-outline-dark btn-sm"><i class="fa-solid fa-house me-1"></i> Inicio</a>
+        <div>
+            <a href="index.php?accion=sistema" class="btn btn-outline-dark btn-sm me-1"><i class="fa-solid fa-house me-1"></i> Inicio</a>
+            <a href="index.php?accion=logout" class="btn btn-dark btn-sm"><i class="fa-solid fa-right-from-bracket me-1"></i> Salir</a>
+        </div>
     </div>
 
     <!-- Formulario de Registro de Nuevo Pedido -->
@@ -211,8 +226,8 @@ $ticket_promedio = ($total_pedidos > 0) ? ($total_ingresos / $total_pedidos) : 0
                     <a href="index.php?accion=sistema" class="btn btn-outline-secondary"><i class="fa-solid fa-rotate-left"></i></a>
                 </div>
                 <div class="col-md-3 d-flex gap-2 justify-content-end">
-                    <a href="views/exportar_excel.php" class="btn btn-success fw-bold notranslate" translate="no"><i class="fa-solid fa-file-excel me-1"></i> Excel</a>
-                    <a href="views/exportar_pdf.php" target="_blank" class="btn btn-danger fw-bold"><i class="fa-solid fa-file-pdf me-1"></i> PDF</a>
+                    <a href="views/exportar_excel.php?<?php echo $params_filtro; ?>" class="btn btn-success fw-bold notranslate" translate="no"><i class="fa-solid fa-file-excel me-1"></i> Excel</a>
+                    <a href="views/exportar_pdf.php?<?php echo $params_filtro; ?>" target="_blank" class="btn btn-danger fw-bold"><i class="fa-solid fa-file-pdf me-1"></i> PDF</a>
                 </div>
             </form>
         </div>
@@ -276,7 +291,6 @@ $ticket_promedio = ($total_pedidos > 0) ? ($total_ingresos / $total_pedidos) : 0
                         <?php if ($result && mysqli_num_rows($result) > 0): ?>
                             <?php while ($row = mysqli_fetch_assoc($result)): ?>
                                 <?php 
-                                    // Escanea todas las claves de la fila buscando el contenido real de la columna
                                     $texto_pedido = '';
                                     foreach ($row as $clave => $valor) {
                                         if (in_array(strtolower($clave), ['detalle', 'descripcion', 'pedido', 'producto', 'plato', 'items']) && !empty(trim($valor))) {
