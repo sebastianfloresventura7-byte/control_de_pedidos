@@ -270,7 +270,7 @@ $params_filtro = "busqueda=" . urlencode($busqueda) . "&fecha_desde=" . urlencod
         </div>
     </div>
 
-    <!-- Tabla de Pedidos -->
+<!-- Tabla de Pedidos -->
     <div class="card shadow-sm border-0">
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -325,6 +325,14 @@ $params_filtro = "busqueda=" . urlencode($busqueda) . "&fecha_desde=" . urlencod
                                                 <li><a class="dropdown-item" href="index.php?accion=sistema&cambiar_estado=Completado&id=<?php echo $row['id_pedido']; ?>">Completado</a></li>
                                             </ul>
                                         </div>
+
+                                        <!-- BOTÓN DE COBRAR AÑADIDO -->
+                                        <a href="views/cobro.php?id=<?php echo $row['id_pedido']; ?>" 
+                                           class="btn btn-sm btn-success" 
+                                           title="Cobrar Pedido">
+                                            💳
+                                        </a>
+
                                         <a href="index.php?accion=sistema&eliminar=1&id=<?php echo $row['id_pedido']; ?>" 
                                            class="btn btn-sm btn-outline-danger" 
                                            onclick="return confirm('¿Seguro de eliminar el pedido #<?php echo $row['id_pedido']; ?>?');">
