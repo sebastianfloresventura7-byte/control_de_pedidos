@@ -9,6 +9,10 @@ if (!isset($_SESSION['usuario_logueado']) || $_SESSION['usuario_logueado'] !== t
     exit;
 }
 
+// Recuperar el rol y nombre del usuario actual de la sesión
+$rol = $_SESSION['rol'] ?? 'admin';
+$nombreUsuario = $_SESSION['usuario_nombre'] ?? 'Usuario';
+
 // Configuración de conexión a la base de datos
 $host = "localhost";
 $usuario = "root";
@@ -28,6 +32,12 @@ mysqli_set_charset($conn, "utf8mb4");
 // 1. PROCESAR ACCIONES (Eliminar / Cambiar Estado / Registrar)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['registrar_pedido'])) {
+        // Solo Admin y Mesero deberían poder registrar pedidos
+        if ($rol !== 'admin' && $rol !== 'mesero') {
+            header("Location: index.php?accion=sistema");
+            exit;
+        }
+
         $cliente_nom = mysqli_real_escape_string($conn, trim($_POST['cliente']));
         $telefono = mysqli_real_escape_string($conn, trim($_POST['telefono']));
         
@@ -71,6 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 if (isset($_GET['cambiar_estado']) && isset($_GET['id'])) {
+    // Cocinero y Admin pueden cambiar estado libremente; cajero/mesero según prefieras
     $id_ped = intval($_GET['id']);
     $nuevo_est = mysqli_real_escape_string($conn, $_GET['cambiar_estado']);
     mysqli_query($conn, "UPDATE pedidos SET estado = '$nuevo_est' WHERE id_pedido = $id_ped");
@@ -79,8 +90,11 @@ if (isset($_GET['cambiar_estado']) && isset($_GET['id'])) {
 }
 
 if (isset($_GET['eliminar']) && isset($_GET['id'])) {
-    $id_ped = intval($_GET['id']);
-    mysqli_query($conn, "DELETE FROM pedidos WHERE id_pedido = $id_ped");
+    // Solo el Administrador puede eliminar registros
+    if ($rol === 'admin') {
+        $id_ped = intval($_GET['id']);
+        mysqli_query($conn, "DELETE FROM pedidos WHERE id_pedido = $id_ped");
+    }
     header("Location: index.php?accion=sistema");
     exit;
 }
@@ -116,14 +130,20 @@ if (!empty($fecha_hasta)) {
 $sql .= " ORDER BY p.id_pedido DESC";
 $result = mysqli_query($conn, $sql);
 
-// 3. MÉTRICAS
-$sql_metricas = "SELECT COUNT(*) as total_pedidos, SUM(total) as total_ingresos FROM pedidos";
-$res_metricas = mysqli_query($conn, $sql_metricas);
-$metricas = mysqli_fetch_assoc($res_metricas);
+// 3. MÉTRICAS (Solo visible para Admin y Cajero)
+$total_ingresos = 0;
+$total_pedidos = 0;
+$ticket_promedio = 0;
 
-$total_ingresos = $metricas['total_ingresos'] ?? 0;
-$total_pedidos = $metricas['total_pedidos'] ?? 0;
-$ticket_promedio = ($total_pedidos > 0) ? ($total_ingresos / $total_pedidos) : 0;
+if ($rol === 'admin' || $rol === 'cajero') {
+    $sql_metricas = "SELECT COUNT(*) as total_pedidos, SUM(total) as total_ingresos FROM pedidos";
+    $res_metricas = mysqli_query($conn, $sql_metricas);
+    $metricas = mysqli_fetch_assoc($res_metricas);
+
+    $total_ingresos = $metricas['total_ingresos'] ?? 0;
+    $total_pedidos = $metricas['total_pedidos'] ?? 0;
+    $ticket_promedio = ($total_pedidos > 0) ? ($total_ingresos / $total_pedidos) : 0;
+}
 
 // Construir parámetros URL para que los botones de exportación mantengan el filtro
 $params_filtro = "busqueda=" . urlencode($busqueda) . "&fecha_desde=" . urlencode($fecha_desde) . "&fecha_hasta=" . urlencode($fecha_hasta);
@@ -145,19 +165,23 @@ $params_filtro = "busqueda=" . urlencode($busqueda) . "&fecha_desde=" . urlencod
 <body>
 
 <div class="container my-4">
-    <!-- Encabezado -->
-    <div class="header-title p-3 rounded d-flex justify-content-between align-items-center mb-4">
-        <h4 class="m-0"><i class="fa-solid fa-store me-2"></i> POLLERÍA "EL BUEN SABOR" - REGISTRO DE PEDIDOS Y CONTROL DE VENTAS</h4>
+    <!-- Encabezado con datos del usuario y rol -->
+    <div class="header-title p-3 rounded d-flex justify-content-between align-items-center mb-4 shadow-sm">
+        <div>
+            <h4 class="m-0"><i class="fa-solid fa-store me-2"></i> POLLERÍA "EL BUEN SABOR"</h4>
+            <small class="text-dark">Usuario: <strong><?= htmlspecialchars($nombreUsuario) ?></strong> | Rol: <span class="badge bg-dark text-warning text-uppercase"><?= htmlspecialchars($rol) ?></span></small>
+        </div>
         <div>
             <a href="index.php?accion=sistema" class="btn btn-outline-dark btn-sm me-1"><i class="fa-solid fa-house me-1"></i> Inicio</a>
             <a href="index.php?accion=logout" class="btn btn-dark btn-sm"><i class="fa-solid fa-right-from-bracket me-1"></i> Salir</a>
         </div>
     </div>
 
-    <!-- Formulario de Registro de Nuevo Pedido -->
+    <!-- 1. FORMULARIO DE REGISTRO: Solo visible para Admin y Mesero -->
+    <?php if ($rol === 'admin' || $rol === 'mesero'): ?>
     <div class="card shadow-sm border-0 mb-4">
         <div class="card-header bg-white fw-bold">
-            <i class="fa-solid fa-cart-plus me-2 text-warning"></i> Registrar Nuevo Pedido
+            <i class="fa-solid fa-cart-plus me-2 text-warning"></i> Registrar Nuevo Pedido (Área de Mesón / Salón)
         </div>
         <div class="card-body">
             <form method="POST" action="index.php?accion=sistema" class="row g-3">
@@ -203,6 +227,7 @@ $params_filtro = "busqueda=" . urlencode($busqueda) . "&fecha_desde=" . urlencod
             </form>
         </div>
     </div>
+    <?php endif; ?>
 
     <!-- Filtros de Búsqueda y Botones de Exportación -->
     <div class="card shadow-sm border-0 mb-4">
@@ -225,15 +250,20 @@ $params_filtro = "busqueda=" . urlencode($busqueda) . "&fecha_desde=" . urlencod
                     <button type="submit" class="btn btn-primary w-100"><i class="fa-solid fa-filter"></i> Filtrar</button>
                     <a href="index.php?accion=sistema" class="btn btn-outline-secondary"><i class="fa-solid fa-rotate-left"></i></a>
                 </div>
+                
+                <!-- Botones de Exportación: Exclusivos para Admin y Cajero -->
+                <?php if ($rol === 'admin' || $rol === 'cajero'): ?>
                 <div class="col-md-3 d-flex gap-2 justify-content-end">
                     <a href="views/exportar_excel.php?<?php echo $params_filtro; ?>" class="btn btn-success fw-bold notranslate" translate="no"><i class="fa-solid fa-file-excel me-1"></i> Excel</a>
                     <a href="views/exportar_pdf.php?<?php echo $params_filtro; ?>" target="_blank" class="btn btn-danger fw-bold"><i class="fa-solid fa-file-pdf me-1"></i> PDF</a>
                 </div>
+                <?php endif; ?>
             </form>
         </div>
     </div>
 
-    <!-- Métricas KPI -->
+    <!-- 2. MÉTRICAS KPI: Solo visibles para Admin y Cajero -->
+    <?php if ($rol === 'admin' || $rol === 'cajero'): ?>
     <div class="row g-3 mb-4">
         <div class="col-md-4">
             <div class="card card-stat bg-white shadow-sm p-3 d-flex flex-row align-items-center">
@@ -269,9 +299,13 @@ $params_filtro = "busqueda=" . urlencode($busqueda) . "&fecha_desde=" . urlencod
             </div>
         </div>
     </div>
+    <?php endif; ?>
 
-<!-- Tabla de Pedidos -->
+    <!-- Tabla de Pedidos y Comandas (Visible para todos, adaptada por rol) -->
     <div class="card shadow-sm border-0">
+        <div class="card-header bg-white fw-bold py-3">
+            <i class="fa-solid fa-clipboard-list me-2 text-primary"></i> Control de Comandas y Pedidos Activos
+        </div>
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-hover align-middle text-center mb-0">
@@ -315,6 +349,8 @@ $params_filtro = "busqueda=" . urlencode($busqueda) . "&fecha_desde=" . urlencod
                                         </span>
                                     </td>
                                     <td>
+                                        <!-- Cambiar Estado (Permitido para Cocinero y Admin, o según necesidad) -->
+                                        <?php if ($rol === 'admin' || $rol === 'cocinero'): ?>
                                         <div class="btn-group btn-group-sm me-1">
                                             <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
                                                 Estado
@@ -325,19 +361,26 @@ $params_filtro = "busqueda=" . urlencode($busqueda) . "&fecha_desde=" . urlencod
                                                 <li><a class="dropdown-item" href="index.php?accion=sistema&cambiar_estado=Completado&id=<?php echo $row['id_pedido']; ?>">Completado</a></li>
                                             </ul>
                                         </div>
+                                        <?php endif; ?>
 
-                                        <!-- BOTÓN DE COBRAR AÑADIDO -->
+                                        <!-- Botón de Cobrar: Visible para Admin y Cajero -->
+                                        <?php if ($rol === 'admin' || $rol === 'cajero'): ?>
                                         <a href="views/cobro.php?id=<?php echo $row['id_pedido']; ?>" 
                                            class="btn btn-sm btn-success" 
                                            title="Cobrar Pedido">
                                             💳
                                         </a>
+                                        <?php endif; ?>
 
+                                        <!-- Botón de Eliminar: Exclusivo para Administrador -->
+                                        <?php if ($rol === 'admin'): ?>
                                         <a href="index.php?accion=sistema&eliminar=1&id=<?php echo $row['id_pedido']; ?>" 
                                            class="btn btn-sm btn-outline-danger" 
-                                           onclick="return confirm('¿Seguro de eliminar el pedido #<?php echo $row['id_pedido']; ?>?');">
+                                           onclick="return confirm('¿Seguro de eliminar el pedido #<?php echo $row['id_pedido']; ?>?');"
+                                           title="Eliminar pedido">
                                             <i class="fa-solid fa-trash"></i>
                                         </a>
+                                        <?php endif; ?>
                                     </td>
                                 </tr>
                             <?php endwhile; ?>

@@ -1,5 +1,5 @@
 <?php
-require_once "Conexion.php";
+require_once __DIR__ . '/../config/conexion.php';
 
 class UsuarioModel {
     private $db;

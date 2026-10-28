@@ -1,7 +1,7 @@
 <?php
 session_start();
-// Asegúrate de que la ruta a tu UsuarioModel sea correcta según la ubicación de tus carpetas
-require_once "UsuarioModel.php";
+// Ruta corregida para encontrar el modelo dentro de la carpeta models/
+require_once 'models/usuario_model.php';
 
 $error = "";
 
@@ -14,12 +14,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     // Validación de usuario y contraseña
     if ($datosUsuario && $datosUsuario["password"] == $password) {
+        $_SESSION["usuario_logueado"] = true; // Añadido para compatibilidad con las validaciones
         $_SESSION["usuario_id"] = $datosUsuario["id"];
         $_SESSION["nombre"]     = $datosUsuario["nombre"];
+        $_SESSION["usuario_nombre"] = $datosUsuario["nombre"]; // Para que coincida con reportes.php
         $_SESSION["rol"]        = $datosUsuario["rol"];
 
         // Redirige al panel principal después de iniciar sesión correctamente
-        header("Location: index.php");
+        header("Location: index.php?accion=sistema");
         exit();
     } else {
         $error = "Usuario o contraseña incorrectos.";
