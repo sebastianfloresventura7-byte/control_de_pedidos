@@ -81,7 +81,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 if (isset($_GET['cambiar_estado']) && isset($_GET['id'])) {
-    // Cocinero y Admin pueden cambiar estado libremente; cajero/mesero según prefieras
     $id_ped = intval($_GET['id']);
     $nuevo_est = mysqli_real_escape_string($conn, $_GET['cambiar_estado']);
     mysqli_query($conn, "UPDATE pedidos SET estado = '$nuevo_est' WHERE id_pedido = $id_ped");
@@ -90,7 +89,6 @@ if (isset($_GET['cambiar_estado']) && isset($_GET['id'])) {
 }
 
 if (isset($_GET['eliminar']) && isset($_GET['id'])) {
-    // Solo el Administrador puede eliminar registros
     if ($rol === 'admin') {
         $id_ped = intval($_GET['id']);
         mysqli_query($conn, "DELETE FROM pedidos WHERE id_pedido = $id_ped");
@@ -145,7 +143,6 @@ if ($rol === 'admin' || $rol === 'cajero') {
     $ticket_promedio = ($total_pedidos > 0) ? ($total_ingresos / $total_pedidos) : 0;
 }
 
-// Construir parámetros URL para que los botones de exportación mantengan el filtro
 $params_filtro = "busqueda=" . urlencode($busqueda) . "&fecha_desde=" . urlencode($fecha_desde) . "&fecha_hasta=" . urlencode($fecha_hasta);
 ?>
 <!DOCTYPE html>
@@ -172,6 +169,18 @@ $params_filtro = "busqueda=" . urlencode($busqueda) . "&fecha_desde=" . urlencod
             <small class="text-dark">Usuario: <strong><?= htmlspecialchars($nombreUsuario) ?></strong> | Rol: <span class="badge bg-dark text-warning text-uppercase"><?= htmlspecialchars($rol) ?></span></small>
         </div>
         <div>
+            <?php if ($rol === 'cajero' || $rol === 'admin'): ?>
+                <a href="views/caja.php" class="btn btn-warning btn-sm me-1 fw-bold text-dark"><i class="fa-solid fa-cash-register me-1"></i> Caja / Turno</a>
+            <?php endif; ?>
+            
+            <?php if ($rol === 'admin' || $rol === 'cocinero' || $rol === 'cajero'): ?>
+                <a href="views/inventario.php" class="btn btn-info btn-sm me-1 fw-bold text-dark"><i class="fa-solid fa-boxes-stacked me-1"></i> Stock / Cocina</a>
+            <?php endif; ?>
+
+            <?php if ($rol === 'admin' || $rol === 'cajero'): ?>
+                <a href="views/graficos.php" class="btn btn-primary btn-sm me-1 fw-bold"><i class="fa-solid fa-chart-column me-1"></i> Gráficos</a>
+            <?php endif; ?>
+
             <a href="index.php?accion=sistema" class="btn btn-outline-dark btn-sm me-1"><i class="fa-solid fa-house me-1"></i> Inicio</a>
             <a href="index.php?accion=logout" class="btn btn-dark btn-sm"><i class="fa-solid fa-right-from-bracket me-1"></i> Salir</a>
         </div>
@@ -251,7 +260,6 @@ $params_filtro = "busqueda=" . urlencode($busqueda) . "&fecha_desde=" . urlencod
                     <a href="index.php?accion=sistema" class="btn btn-outline-secondary"><i class="fa-solid fa-rotate-left"></i></a>
                 </div>
                 
-                <!-- Botones de Exportación: Exclusivos para Admin y Cajero -->
                 <?php if ($rol === 'admin' || $rol === 'cajero'): ?>
                 <div class="col-md-3 d-flex gap-2 justify-content-end">
                     <a href="views/exportar_excel.php?<?php echo $params_filtro; ?>" class="btn btn-success fw-bold notranslate" translate="no"><i class="fa-solid fa-file-excel me-1"></i> Excel</a>
@@ -301,7 +309,7 @@ $params_filtro = "busqueda=" . urlencode($busqueda) . "&fecha_desde=" . urlencod
     </div>
     <?php endif; ?>
 
-    <!-- Tabla de Pedidos y Comandas (Visible para todos, adaptada por rol) -->
+    <!-- Tabla de Pedidos y Comandas -->
     <div class="card shadow-sm border-0">
         <div class="card-header bg-white fw-bold py-3">
             <i class="fa-solid fa-clipboard-list me-2 text-primary"></i> Control de Comandas y Pedidos Activos
@@ -349,7 +357,6 @@ $params_filtro = "busqueda=" . urlencode($busqueda) . "&fecha_desde=" . urlencod
                                         </span>
                                     </td>
                                     <td>
-                                        <!-- Cambiar Estado (Permitido para Cocinero y Admin, o según necesidad) -->
                                         <?php if ($rol === 'admin' || $rol === 'cocinero'): ?>
                                         <div class="btn-group btn-group-sm me-1">
                                             <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
@@ -363,7 +370,6 @@ $params_filtro = "busqueda=" . urlencode($busqueda) . "&fecha_desde=" . urlencod
                                         </div>
                                         <?php endif; ?>
 
-                                        <!-- Botón de Cobrar: Visible para Admin y Cajero -->
                                         <?php if ($rol === 'admin' || $rol === 'cajero'): ?>
                                         <a href="views/cobro.php?id=<?php echo $row['id_pedido']; ?>" 
                                            class="btn btn-sm btn-success" 
@@ -372,7 +378,6 @@ $params_filtro = "busqueda=" . urlencode($busqueda) . "&fecha_desde=" . urlencod
                                         </a>
                                         <?php endif; ?>
 
-                                        <!-- Botón de Eliminar: Exclusivo para Administrador -->
                                         <?php if ($rol === 'admin'): ?>
                                         <a href="index.php?accion=sistema&eliminar=1&id=<?php echo $row['id_pedido']; ?>" 
                                            class="btn btn-sm btn-outline-danger" 
